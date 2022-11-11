@@ -23,6 +23,7 @@ import org.eclipse.edc.gcp.storage.GcsStoreSchema;
 
 import static org.eclipse.edc.gcp.storage.GcsStoreSchema.BUCKET_NAME;
 import static org.eclipse.edc.gcp.storage.GcsStoreSchema.LOCATION;
+import static org.eclipse.edc.gcp.storage.GcsStoreSchema.PROJECT_ID;
 import static org.eclipse.edc.gcp.storage.GcsStoreSchema.SERVICE_ACCOUNT_EMAIL;
 import static org.eclipse.edc.gcp.storage.GcsStoreSchema.SERVICE_ACCOUNT_NAME;
 import static org.eclipse.edc.gcp.storage.GcsStoreSchema.STORAGE_CLASS;
@@ -40,6 +41,10 @@ public class GcsProvisionedResource extends ProvisionedDataDestinationResource {
 
     public String getLocation() {
         return getDataAddress().getProperty(LOCATION);
+    }
+
+    public String getProjectId() {
+        return getDataAddress().getProperty(PROJECT_ID);
     }
 
     public String getStorageClass() {
@@ -75,6 +80,11 @@ public class GcsProvisionedResource extends ProvisionedDataDestinationResource {
 
         public GcsProvisionedResource.Builder location(String location) {
             dataAddressBuilder.property(LOCATION, location);
+            return this;
+        }
+
+        public GcsProvisionedResource.Builder projectId(String projectId) {
+            this.dataAddressBuilder.property(PROJECT_ID, projectId);
             return this;
         }
 

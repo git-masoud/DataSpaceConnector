@@ -14,6 +14,7 @@
 
 package org.eclipse.edc.connector.dataplane.gcp.storage;
 
+import org.eclipse.edc.gcp.common.GcpCredentials;
 import org.eclipse.edc.gcp.storage.GcsStoreSchema;
 import org.eclipse.edc.spi.monitor.Monitor;
 import org.eclipse.edc.spi.security.Vault;
@@ -38,7 +39,7 @@ class GcsDataSinkFactoryTest {
             mock(ExecutorService.class),
             mock(Monitor.class),
             mock(Vault.class),
-            new TypeManager()
+            new TypeManager(), mock(GcpCredentials.class)
     );
 
     @Test

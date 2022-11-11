@@ -27,6 +27,8 @@ dependencies {
     implementation("com.google.cloud:google-iam-admin:${googleCloudIamAdminVersion}")
     implementation("com.google.cloud:google-cloud-storage:${googleCloudStorageVersion}")
     implementation("com.google.cloud:google-cloud-iamcredentials:${googleCloudIamCredentialsVersion}")
+
+    testImplementation(project(":core:common:junit"))
 }
 publishing {
     publications {
