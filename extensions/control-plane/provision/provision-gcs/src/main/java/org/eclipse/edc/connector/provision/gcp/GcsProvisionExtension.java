@@ -61,26 +61,15 @@ public class GcsProvisionExtension implements ServiceExtension {
         var projectId = context.getConfig().getString(GCP_PROJECT_ID);
 
         var gcpCredential = new GcpCredentials(vault, typeManager, monitor);
-        // var iamService = IamServiceImpl.Builder.newInstance(monitor, projectId).build();
 
-        // var provisioner = new GcsProvisioner(monitor, storageService, iamService);
         var provisioner = new GcsProvisioner(monitor, gcpCredential, projectId);
         provisionManager.register(provisioner);
 
         manifestGenerator.registerGenerator(new GcsConsumerResourceDefinitionGenerator());
 
-        var storageClient = createDefaultStorageClient(projectId);
-        var storageService = new StorageServiceImpl(storageClient, monitor);
-        statusCheckerRegistry.register(GcsStoreSchema.TYPE, new GcsProvisionerStatusChecker(storageService));
+       statusCheckerRegistry.register(GcsStoreSchema.TYPE,
+               new GcsProvisionerStatusChecker(monitor, gcpCredential, projectId));
     }
 
-   /**
-     * Creates {@link Storage} for the specified project using application default credentials
-     *
-     * @param projectId The project that should be used for storage operations
-     * @return {@link Storage}
-     */
-    private Storage createDefaultStorageClient(String projectId) {
-        return StorageOptions.newBuilder().setProjectId(projectId).build().getService();
-    }
+
 }

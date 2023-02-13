@@ -78,27 +78,25 @@ public class GcsProvisioner implements Provisioner<GcsResourceDefinition, GcsPro
         var projectId = getProjectId(resourceDefinition.getProjectId());
         Storage storageClient = null;
         IamService iamService = null;
-        var dataAddress = resourceDefinition.getDataAddress();
-        if (dataAddress != null &&
-            dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME) != null &&
-            dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE) != null) {
-            var googleCredentials = gcpCredential.resolveGoogleCredentialsFromDataAddress(dataAddress.getKeyName(),
-                    dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME),
-                    dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE));
-
-            iamService = createIamService(monitor,
+        var tokenKeyName = resourceDefinition.getTokenKeyName();
+        var serviceAccountKeyName = resourceDefinition.getServiceAccountKeyName();
+        var serviceAccountKeyValue = resourceDefinition.getServiceAccountKeyValue();
+        var googleCredentials = gcpCredential.resolveGoogleCredentialsFromDataAddress(
+                tokenKeyName,
+                    serviceAccountKeyName,
+                    serviceAccountKeyValue);
+        iamService = createIamService(monitor,
                     projectId, googleCredentials);
 
-            storageClient = createStorageClient(googleCredentials);
-        } else {
-            iamService = createIamService(monitor, projectId);
-            storageClient = createStorageClient(projectId);            
-        }
+
+        storageClient = StorageOptions.newBuilder()
+                .setCredentials(googleCredentials)
+                .setProjectId(projectId).build().getService();
         var storageService = new StorageServiceImpl(storageClient, monitor);
         return provision(resourceDefinition, policy, iamService, storageService);
     }
 
-     public CompletableFuture<StatusResult<ProvisionResponse>> provision(
+    public CompletableFuture<StatusResult<ProvisionResponse>> provision(
             GcsResourceDefinition resourceDefinition, Policy policy,
             IamService iamService, StorageService storageService) {
         var bucketName = resourceDefinition.getId();
@@ -169,12 +167,12 @@ public class GcsProvisioner implements Provisioner<GcsResourceDefinition, GcsPro
         var projectId = getProjectId(provisionedResource.getProjectId());
         var dataAddress = provisionedResource.getDataAddress();
         if (dataAddress != null &&
-            dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME) != null &&
-            dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE) != null) {
+                dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME) != null &&
+                dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE) != null) {
             var googleCredentials = gcpCredential.resolveGoogleCredentialsFromDataAddress(dataAddress.getKeyName(),
-            dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME),
-            dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE));
-            
+                    dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME),
+                    dataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE));
+
             iamService = createIamService(monitor, projectId, googleCredentials);
         } else {
             iamService = createIamService(monitor, projectId);
@@ -241,27 +239,6 @@ public class GcsProvisioner implements Provisioner<GcsResourceDefinition, GcsPro
                 .resourceName(resourceName)
                 .bucketName(bucketName)
                 .hasToken(true).build();
-    }
-
-    /**
-     * Creates {@link Storage} for the specified project using application default credentials
-     *
-     * @param googleCredentials Google credentials
-     * @return {@link Storage}
-     */
-    private Storage createStorageClient(GoogleCredentials googleCredentials) {
-        return StorageOptions.newBuilder()
-                .setCredentials(googleCredentials).build().getService();
-    }
-
-    /**
-     * Creates {@link Storage} for the specified project using application default credentials
-     *
-     * @param projectId project identifier
-     * @return {@link Storage}
-     */
-    private Storage createStorageClient(String projectId) {
-        return StorageOptions.newBuilder().setProjectId(projectId).build().getService();
     }
 
     private IamService createIamService(Monitor monitor, String projectId, GoogleCredentials googleCredentials) {

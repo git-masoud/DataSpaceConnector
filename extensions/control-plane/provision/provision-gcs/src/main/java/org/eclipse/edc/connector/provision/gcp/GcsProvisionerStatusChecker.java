@@ -18,12 +18,16 @@ import com.google.cloud.storage.Blob;
 
 import java.util.Iterator;
 
-import org.eclipse.edc.gcp.storage.GcsStoreSchema;
+import com.google.cloud.storage.StorageOptions;
 import org.eclipse.edc.connector.transfer.spi.types.ProvisionedResource;
+import org.eclipse.edc.connector.transfer.spi.types.ResourceDefinition;
 import org.eclipse.edc.connector.transfer.spi.types.StatusChecker;
 import org.eclipse.edc.connector.transfer.spi.types.TransferProcess;
+import org.eclipse.edc.gcp.common.GcpCredentials;
 import org.eclipse.edc.gcp.storage.StorageServiceImpl;
 import org.eclipse.edc.spi.EdcException;
+import org.eclipse.edc.spi.monitor.Monitor;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -32,10 +36,16 @@ import static org.eclipse.edc.connector.transfer.spi.types.TransferProcess.Type.
 import static java.lang.String.format;
 
 public class GcsProvisionerStatusChecker implements StatusChecker {
-    private StorageServiceImpl storageService;
 
-    public GcsProvisionerStatusChecker(StorageServiceImpl storageService) {
-        this.storageService = storageService;
+    private final Monitor monitor;
+    private final GcpCredentials gcpCredential;
+
+    private @Nullable String projectId;
+
+    public GcsProvisionerStatusChecker(Monitor monitor, GcpCredentials gcpCredential, @Nullable String projectId) {
+        this.monitor = monitor;
+        this.gcpCredential = gcpCredential;
+        this.projectId = projectId;
     }
 
     @Override
@@ -43,22 +53,36 @@ public class GcsProvisionerStatusChecker implements StatusChecker {
         if (transferProcess.getType() == PROVIDER) {
             // TODO check if PROVIDER process implementation is needed
         }
+        var gcsResourceDefinition = (GcsResourceDefinition) new GcsConsumerResourceDefinitionGenerator().generate(transferProcess.getDataRequest(),null);
 
-        var bucketName = transferProcess.getDataRequest().getDataDestination().getProperty(GcsStoreSchema.BUCKET_NAME);
         if (resources != null && !resources.isEmpty()) {
             for (var resource : resources) {
                 if (resource instanceof GcsProvisionedResource) {
-                    return checkBucketTransferComplete(bucketName);
+                    return checkBucketTransferComplete(gcsResourceDefinition);
                 }
             }
         } else {
-            return checkBucketTransferComplete(bucketName);
+            return checkBucketTransferComplete(gcsResourceDefinition);
         }
         throw new EdcException(format("Cannot determine completion: no resource associated with transfer process %s.", transferProcess));
     }
 
-    private boolean checkBucketTransferComplete(String bucketName) {
-        String testBlobName = bucketName+".complete";
+    private boolean checkBucketTransferComplete(GcsResourceDefinition gcsResourceDefinition) {
+       var bucketName = gcsResourceDefinition.getBucketName();
+        var  testBlobName = bucketName + ".complete";
+
+        var tokenKeyName = gcsResourceDefinition.getTokenKeyName();
+        var serviceAccountKeyName = gcsResourceDefinition.getServiceAccountKeyName();
+        var serviceAccountKeyValue = gcsResourceDefinition.getServiceAccountKeyValue();
+        var googleCredentials = gcpCredential.resolveGoogleCredentialsFromDataAddress(
+                tokenKeyName,
+                serviceAccountKeyName,
+                serviceAccountKeyValue);
+
+        var storageClient = StorageOptions.newBuilder()
+                .setCredentials(googleCredentials)
+                .setProjectId(projectId).build().getService();        var storageService = new StorageServiceImpl(storageClient, monitor);
+
         var blobs = storageService.list(bucketName);
         // TODO rewrite with stream
         Iterator<Blob> blobIterator = blobs.iterateAll().iterator();
