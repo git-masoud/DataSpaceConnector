@@ -20,7 +20,7 @@ import org.eclipse.edc.spi.EdcException;
 import org.eclipse.edc.spi.monitor.Monitor;
 import org.eclipse.edc.spi.security.Vault;
 import org.eclipse.edc.spi.types.TypeManager;
-import org.jetbrains.annotations.Nullable;
+import org.eclipse.edc.util.string.StringUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -34,6 +34,7 @@ public class GcpCredentials {
         DEFAULT_APPLICATION, GOOGLE_ACCESS_TOKEN, GOOGLE_SERVICE_ACCOUNT_KEY_FILE
     }
 
+    private static final String SERVICE_ACCOUNT = "service_account";
     private final Base64.Decoder b64Decoder;
     private final Vault vault;
     private final TypeManager typeManager;
@@ -49,34 +50,27 @@ public class GcpCredentials {
     /**
      * Returns the Google Credentials which will be created based on the following order:
      * if none of the  parameters were provided then Google Credentials will be retrieved from ApplicationDefaultCredentials
-     *    Otherwise it will be retrieved from a token or a Google Credentials file
-     *
-     * @param vaultTokenKeyName Key name of an entry in the vault containing an access token.
-     * @param vaultServiceAccountKeyName key name of an entry in the vault containing a valid Google Credentials file in json format.
-     * @param serviceAccountValue Content of a valid Google Credentials file in json format encoded with base64 .
+     * Otherwise it will be retrieved from a token or a Google Credentials file
      *
      * @return GoogleCredentials
      */
-    public GoogleCredentials resolveGoogleCredentialsFromDataAddress(@Nullable String vaultTokenKeyName,
-                                                                     @Nullable String vaultServiceAccountKeyName,
-                                                                     @Nullable String serviceAccountValue) {
-        if (vaultTokenKeyName != null && !vaultTokenKeyName.isEmpty()) {
-            var tokenContent = vault.resolveSecret(vaultTokenKeyName);
-            return createGoogleCredential(tokenContent, GcpCredentialType.GOOGLE_ACCESS_TOKEN);
-        } else if (vaultServiceAccountKeyName != null && !vaultServiceAccountKeyName.isEmpty()) {
+    public GoogleCredentials resolveGoogleCredentialsFromDataAddress(GcpServiceAccountCredentials gcpServiceAccountCredentials) {
+        var vaultTokenKeyName = gcpServiceAccountCredentials.getVaultTokenKeyName();
+        var vaultServiceAccountKeyName = gcpServiceAccountCredentials.getVaultServiceAccountKeyName();
+        var serviceAccountValue = gcpServiceAccountCredentials.getServiceAccountValue();
+
+        if (!StringUtils.isNullOrBlank(vaultTokenKeyName)) {
+            return createGoogleCredential(vault.resolveSecret(vaultTokenKeyName), GcpCredentialType.GOOGLE_ACCESS_TOKEN);
+        } else if (!StringUtils.isNullOrBlank(vaultServiceAccountKeyName)) {
             return createGoogleCredential(vault.resolveSecret(vaultServiceAccountKeyName), GcpCredentialType.GOOGLE_SERVICE_ACCOUNT_KEY_FILE);
-        } else if (serviceAccountValue != null && !serviceAccountValue.isEmpty()) {
-            try {
+        } else if (!StringUtils.isNullOrBlank(serviceAccountValue)) {
                 var serviceKeyContent = new String(b64Decoder.decode(serviceAccountValue));
-                if (!serviceKeyContent.contains("service_account")) {
+                if (!serviceKeyContent.contains(SERVICE_ACCOUNT)) {
                     throw new GcpException("SERVICE_ACCOUNT_VALUE is not provided as a valid service account key file.");
                 }
                 return createGoogleCredential(serviceKeyContent, GcpCredentialType.GOOGLE_SERVICE_ACCOUNT_KEY_FILE);
-            } catch (IllegalArgumentException ex) {
-                throw new GcpException("SERVICE_ACCOUNT_VALUE is not provided in a valid base64 format.");
-            }
         } else {
-            return creatApplicationDefaultCredentials();
+            return createApplicationDefaultCredentials();
         }
     }
 
@@ -90,7 +84,7 @@ public class GcpCredentials {
      *
      * @return GoogleCredentials
      */
-    public GoogleCredentials creatApplicationDefaultCredentials() {
+    public GoogleCredentials createApplicationDefaultCredentials() {
         return createGoogleCredential("", GcpCredentialType.DEFAULT_APPLICATION);
     }
 

@@ -21,6 +21,7 @@ import org.eclipse.edc.connector.dataplane.spi.pipeline.DataSink;
 import org.eclipse.edc.connector.dataplane.spi.pipeline.DataSinkFactory;
 import org.eclipse.edc.connector.dataplane.util.validation.ValidationRule;
 import org.eclipse.edc.gcp.common.GcpCredentials;
+import org.eclipse.edc.gcp.common.GcpServiceAccountCredentials;
 import org.eclipse.edc.gcp.storage.GcsStoreSchema;
 import org.eclipse.edc.spi.EdcException;
 import org.eclipse.edc.spi.monitor.Monitor;
@@ -61,9 +62,11 @@ public class GcsDataSinkFactory implements DataSinkFactory {
             throw new EdcException(String.join(", ", validationResult.getFailureMessages()));
         }
         var destinationDataAddress = request.getDestinationDataAddress();
-        var googleCredentials = gcpCredential.resolveGoogleCredentialsFromDataAddress(destinationDataAddress.getKeyName(),
-                destinationDataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME),
-                destinationDataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE));
+        var tokenKeyName = destinationDataAddress.getKeyName();
+        var serviceAccountKeyName = destinationDataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME);
+        var serviceAccountValue = destinationDataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE);
+        var gcpServiceAccountCredentials = new GcpServiceAccountCredentials(tokenKeyName, serviceAccountKeyName, serviceAccountValue);
+        var googleCredentials = gcpCredential.resolveGoogleCredentialsFromDataAddress(gcpServiceAccountCredentials);
 
         var destination = request.getDestinationDataAddress();
 
