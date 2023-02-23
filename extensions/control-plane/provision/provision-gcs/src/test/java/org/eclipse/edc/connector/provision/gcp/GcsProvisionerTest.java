@@ -103,7 +103,7 @@ class GcsProvisionerTest {
         doNothing().when(storageServiceMock).addProviderPermissions(bucket, serviceAccount);
         when(iamServiceMock.createAccessToken(serviceAccount)).thenReturn(token);
 
-        var response = provisioner.provision(resourceDefinition, testPolicy, iamServiceMock, storageServiceMock).join().getContent();
+        var response = provisioner.provision(resourceDefinition, iamServiceMock, storageServiceMock).join().getContent();
 
         assertThat(response.getResource()).isInstanceOfSatisfying(GcsProvisionedResource.class, resource -> {
             assertThat(resource.getId()).isEqualTo(resourceDefinitionId);
@@ -129,7 +129,7 @@ class GcsProvisionerTest {
         when(storageServiceMock.getOrCreateEmptyBucket(bucketName, bucketLocation)).thenReturn(new GcsBucket(bucketName));
         when(storageServiceMock.isEmpty(bucketName)).thenReturn(false);
 
-        var response = provisioner.provision(resourceDefinition, testPolicy, iamServiceMock, storageServiceMock).join();
+        var response = provisioner.provision(resourceDefinition, iamServiceMock, storageServiceMock).join();
 
         assertThat(response.failed()).isTrue();
         assertThat(response.getFailure().status()).isEqualTo(ResponseStatus.FATAL_ERROR);
@@ -148,7 +148,7 @@ class GcsProvisionerTest {
 
         doThrow(new GcpException("some error")).when(storageServiceMock).getOrCreateEmptyBucket(bucketName, bucketLocation);
 
-        var response = provisioner.provision(resourceDefinition, testPolicy, iamServiceMock, storageServiceMock).join();
+        var response = provisioner.provision(resourceDefinition, iamServiceMock, storageServiceMock).join();
         assertThat(response.failed()).isTrue();
     }
 
