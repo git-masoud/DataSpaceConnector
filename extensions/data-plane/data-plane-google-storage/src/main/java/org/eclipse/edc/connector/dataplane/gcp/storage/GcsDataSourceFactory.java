@@ -20,6 +20,7 @@ import org.eclipse.edc.connector.dataplane.spi.pipeline.DataSource;
 import org.eclipse.edc.connector.dataplane.spi.pipeline.DataSourceFactory;
 import org.eclipse.edc.connector.dataplane.util.validation.ValidationRule;
 import org.eclipse.edc.gcp.common.GcpCredentials;
+import org.eclipse.edc.gcp.common.GcpServiceAccountCredentials;
 import org.eclipse.edc.gcp.storage.GcsStoreSchema;
 import org.eclipse.edc.spi.EdcException;
 import org.eclipse.edc.spi.monitor.Monitor;
@@ -60,9 +61,11 @@ public class GcsDataSourceFactory implements DataSourceFactory {
         }
 
         var sourceDataAddress = request.getSourceDataAddress();
-        var googleCredentials = gcpCredential.resolveGoogleCredentialsFromDataAddress(sourceDataAddress.getKeyName(),
-                sourceDataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME),
-                sourceDataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE));
+        var tokenKeyName = sourceDataAddress.getKeyName();
+        var serviceAccountKeyName = sourceDataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME);
+        var serviceAccountValue = sourceDataAddress.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE);
+        var gcpServiceAccountCredentials = new GcpServiceAccountCredentials(tokenKeyName, serviceAccountKeyName, serviceAccountValue);
+        var googleCredentials = gcpCredential.resolveGoogleCredentialsFromDataAddress(gcpServiceAccountCredentials);
         var storageClient = StorageOptions.newBuilder()
                 .setCredentials(googleCredentials)
                 .build().getService();

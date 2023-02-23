@@ -15,7 +15,6 @@
 package org.eclipse.edc.connector.provision.gcp;
 
 import org.eclipse.edc.connector.transfer.spi.types.ResourceDefinition;
-import org.eclipse.edc.spi.types.domain.DataAddress;
 
 import java.util.Objects;
 

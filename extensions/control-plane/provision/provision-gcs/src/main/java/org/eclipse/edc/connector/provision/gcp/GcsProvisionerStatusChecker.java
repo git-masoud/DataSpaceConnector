@@ -20,10 +20,10 @@ import java.util.Iterator;
 
 import com.google.cloud.storage.StorageOptions;
 import org.eclipse.edc.connector.transfer.spi.types.ProvisionedResource;
-import org.eclipse.edc.connector.transfer.spi.types.ResourceDefinition;
 import org.eclipse.edc.connector.transfer.spi.types.StatusChecker;
 import org.eclipse.edc.connector.transfer.spi.types.TransferProcess;
 import org.eclipse.edc.gcp.common.GcpCredentials;
+import org.eclipse.edc.gcp.common.GcpServiceAccountCredentials;
 import org.eclipse.edc.gcp.storage.StorageServiceImpl;
 import org.eclipse.edc.spi.EdcException;
 import org.eclipse.edc.spi.monitor.Monitor;
@@ -40,7 +40,7 @@ public class GcsProvisionerStatusChecker implements StatusChecker {
     private final Monitor monitor;
     private final GcpCredentials gcpCredential;
 
-    private @Nullable String projectId;
+    private final @Nullable String projectId;
 
     public GcsProvisionerStatusChecker(Monitor monitor, GcpCredentials gcpCredential, @Nullable String projectId) {
         this.monitor = monitor;
@@ -74,14 +74,13 @@ public class GcsProvisionerStatusChecker implements StatusChecker {
         var tokenKeyName = gcsResourceDefinition.getTokenKeyName();
         var serviceAccountKeyName = gcsResourceDefinition.getServiceAccountKeyName();
         var serviceAccountKeyValue = gcsResourceDefinition.getServiceAccountKeyValue();
-        var googleCredentials = gcpCredential.resolveGoogleCredentialsFromDataAddress(
-                tokenKeyName,
-                serviceAccountKeyName,
-                serviceAccountKeyValue);
+        var gcpServiceAccountCredentials = new GcpServiceAccountCredentials(tokenKeyName, serviceAccountKeyName, serviceAccountKeyValue);
+        var googleCredentials = gcpCredential.resolveGoogleCredentialsFromDataAddress(gcpServiceAccountCredentials);
 
         var storageClient = StorageOptions.newBuilder()
                 .setCredentials(googleCredentials)
-                .setProjectId(projectId).build().getService();        var storageService = new StorageServiceImpl(storageClient, monitor);
+                .setProjectId(projectId).build().getService();
+        var storageService = new StorageServiceImpl(storageClient, monitor);
 
         var blobs = storageService.list(bucketName);
         // TODO rewrite with stream

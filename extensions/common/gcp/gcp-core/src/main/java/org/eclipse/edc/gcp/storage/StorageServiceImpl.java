@@ -30,6 +30,17 @@ import java.util.Optional;
 
 public class StorageServiceImpl implements StorageService {
 
+    public enum GcpRoles{
+        OBJECT_CREATOR("roles/storage.objectCreator"),
+        OBJECT_VIEWER("roles/storage.objectViewer");
+
+        private final String role;
+
+        GcpRoles(String role) { this.role = role; }
+
+        public String getValue() { return role; }
+    }
+
     private final Storage storageClient;
     private final Monitor monitor;
 
@@ -74,7 +85,8 @@ public class StorageServiceImpl implements StorageService {
 
     @Override
     public void addProviderPermissions(GcsBucket bucket, GcpServiceAccount serviceAccount) {
-        addRoleBinding(bucket, serviceAccount, "roles/storage.objectCreator");
+        addRoleBinding(bucket, serviceAccount, GcpRoles.OBJECT_CREATOR.getValue());
+        addRoleBinding(bucket, serviceAccount, GcpRoles.OBJECT_VIEWER.getValue());
     }
 
     @Override

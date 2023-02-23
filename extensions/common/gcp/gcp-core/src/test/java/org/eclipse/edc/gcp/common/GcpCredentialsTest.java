@@ -83,19 +83,19 @@ public class GcpCredentialsTest {
 
     @Test
     void testResolveGoogleCredentialWhenTokenKeyNameIsProvided() {
-        var gcpCred = gcpCredential.resolveGoogleCredentialsFromDataAddress(accessTokenKeyName, null, null);
+        var gcpCred = gcpCredential.resolveGoogleCredentialsFromDataAddress(new GcpServiceAccountCredentials(accessTokenKeyName, null, null));
         assert (gcpCred != null);
     }
 
     @Test
     void testResolveGoogleCredentialWhenInvalidTokenIsProvided() {
-        Exception thrown = assertThrows(EdcException.class, () -> gcpCredential.resolveGoogleCredentialsFromDataAddress(invalidAccessTokenKeyName,  null, null));
+        Exception thrown = assertThrows(EdcException.class, () -> gcpCredential.resolveGoogleCredentialsFromDataAddress(new GcpServiceAccountCredentials(invalidAccessTokenKeyName,  null, null)));
         assert (thrown.getMessage().contains("valid GcpAccessToken format"));
     }
 
     @Test
     void testResolveGoogleCredentialPriorityWhenTokenIsInvalid() {
-        Exception thrown = assertThrows(EdcException.class, () -> gcpCredential.resolveGoogleCredentialsFromDataAddress(invalidAccessTokenKeyName, serviceAccountKeyName, null));
+        Exception thrown = assertThrows(EdcException.class, () -> gcpCredential.resolveGoogleCredentialsFromDataAddress(new GcpServiceAccountCredentials(invalidAccessTokenKeyName, serviceAccountKeyName, null)));
 
         assert (thrown.getMessage().contains("valid GcpAccessToken format"));
     }
@@ -103,31 +103,32 @@ public class GcpCredentialsTest {
 
     @Test
     void testResolveGoogleCredentialWhenServiceAccountKeyNameIsProvided() {
-        var gcpCred = gcpCredential.resolveGoogleCredentialsFromDataAddress(null, serviceAccountKeyName, null);
+        var gcpCred = gcpCredential.resolveGoogleCredentialsFromDataAddress(new GcpServiceAccountCredentials(null, serviceAccountKeyName, null));
         assert (gcpCred != null);
     }
 
     @Test
     void testResolveGoogleCredentialWhenInvalidServiceAccountKeyNameIsProvided() {
-        Exception thrown = assertThrows(GcpException.class, () -> gcpCredential.resolveGoogleCredentialsFromDataAddress(null,
-                invalidServiceAccountKeyName, null));
+        Exception thrown = assertThrows(GcpException.class, () -> gcpCredential.resolveGoogleCredentialsFromDataAddress(new GcpServiceAccountCredentials(null,
+                invalidServiceAccountKeyName, null)));
+        assert (thrown.getMessage().contains("Error while getting the credentials from the credentials file"));
     }
 
     @Test
     void testResolveGoogleCredentialWhenServiceAccountValueIsProvided() {
-        var gcpCred = gcpCredential.resolveGoogleCredentialsFromDataAddress(null, null, serviceAccountFileInB64);
+        var gcpCred = gcpCredential.resolveGoogleCredentialsFromDataAddress(new GcpServiceAccountCredentials(null, null, serviceAccountFileInB64));
         assert (gcpCred != null);
     }
 
     @Test
     void testResolveGoogleCredentialWhenInvalidServiceAccountValueIsProvided() {
-        Exception thrown = assertThrows(EdcException.class, () -> gcpCredential.resolveGoogleCredentialsFromDataAddress(null, null, serviceAccountFileInB64 + "makeItWrongB64"));
-        assert (thrown.getMessage().contains("valid base64 format"));
+        Exception thrown = assertThrows(IllegalArgumentException.class, () -> gcpCredential.resolveGoogleCredentialsFromDataAddress(new GcpServiceAccountCredentials(null, null, serviceAccountFileInB64 + "makeItWrongB64")));
+        assert (thrown.getMessage().contains("incorrect ending byte at 2996"));
     }
 
     @Test
     void testResolveGoogleCredentialPriorityWhenInvalidServiceAccountValueIsProvided() {
-        var gcpCred = gcpCredential.resolveGoogleCredentialsFromDataAddress(null, serviceAccountKeyName, serviceAccountFileInB64 + "makeItWrongB64");
+        var gcpCred = gcpCredential.resolveGoogleCredentialsFromDataAddress(new GcpServiceAccountCredentials(null, serviceAccountKeyName, serviceAccountFileInB64 + "makeItWrongB64"));
         assert (gcpCred != null);
     }
 }
