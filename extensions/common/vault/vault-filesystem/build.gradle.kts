@@ -19,17 +19,11 @@ plugins {
 dependencies {
     api(project(":spi:common:core-spi"))
     implementation(project(":core:common:util"))
-    implementation(libs.bouncyCastle.bcpkix)
+    implementation(libs.bouncyCastle.bcpkixJdk18on)
 
     testImplementation(project(":extensions:common:iam:decentralized-identity:identity-did-crypto"))
     testImplementation(libs.nimbus.jwt)
-    testImplementation(libs.bouncyCastle.bcprov)
+    testImplementation(libs.bouncyCastle.bcprovJdk18on)
 }
 
-publishing {
-    publications {
-        create<MavenPublication>(project.name) {
-            from(components["java"])
-        }
-    }
-}
+

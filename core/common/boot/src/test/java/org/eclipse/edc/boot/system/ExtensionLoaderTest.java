@@ -30,9 +30,9 @@ import org.eclipse.edc.spi.monitor.Monitor;
 import org.eclipse.edc.spi.monitor.MultiplexingMonitor;
 import org.eclipse.edc.spi.system.MonitorExtension;
 import org.eclipse.edc.spi.system.ServiceExtension;
+import org.eclipse.edc.spi.system.ServiceExtensionContext;
 import org.eclipse.edc.spi.system.injection.EdcInjectionException;
 import org.eclipse.edc.spi.system.injection.InjectionContainer;
-import org.eclipse.edc.spi.types.TypeManager;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -60,6 +60,7 @@ class ExtensionLoaderTest {
     private final ServiceLocator serviceLocator = mock(ServiceLocator.class);
     private final ServiceExtension coreExtension = new TestCoreExtension();
     private final ExtensionLoader loader = new ExtensionLoader(serviceLocator);
+    private final ServiceExtensionContext context = mock(ServiceExtensionContext.class);
 
     @BeforeAll
     public static void setup() {
@@ -130,7 +131,7 @@ class ExtensionLoaderTest {
         };
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(service1, coreExtension));
 
-        var list = loader.loadServiceExtensions();
+        var list = loader.loadServiceExtensions(context);
 
         assertThat(list).hasSize(2);
         assertThat(list).extracting(InjectionContainer::getInjectionTarget).contains(service1);
@@ -147,7 +148,7 @@ class ExtensionLoaderTest {
 
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(service1, service2, coreExtension));
 
-        var list = loader.loadServiceExtensions();
+        var list = loader.loadServiceExtensions(context);
         assertThat(list).hasSize(3);
         assertThat(list).extracting(InjectionContainer::getInjectionTarget).containsExactlyInAnyOrder(service1, service2, coreExtension);
         verify(serviceLocator).loadImplementors(eq(ServiceExtension.class), anyBoolean());
@@ -162,7 +163,7 @@ class ExtensionLoaderTest {
 
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(providing, depending, someExtension, coreExtension));
 
-        var services = loader.loadServiceExtensions();
+        var services = loader.loadServiceExtensions(context);
         assertThat(services).extracting(InjectionContainer::getInjectionTarget).containsExactly(coreExtension, providing, depending, someExtension);
         verify(serviceLocator).loadImplementors(eq(ServiceExtension.class), anyBoolean());
     }
@@ -181,7 +182,7 @@ class ExtensionLoaderTest {
 
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(depending, thirdService, coreService, coreExtension));
 
-        var services = loader.loadServiceExtensions();
+        var services = loader.loadServiceExtensions(context);
         assertThat(services).extracting(InjectionContainer::getInjectionTarget).containsExactlyInAnyOrder(coreService, depending, thirdService, coreExtension);
         verify(serviceLocator).loadImplementors(eq(ServiceExtension.class), anyBoolean());
     }
@@ -194,7 +195,7 @@ class ExtensionLoaderTest {
 
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(s1, s2, coreExtension));
 
-        assertThatThrownBy(() -> loader.loadServiceExtensions()).isInstanceOf(CyclicDependencyException.class);
+        assertThatThrownBy(() -> loader.loadServiceExtensions(context)).isInstanceOf(CyclicDependencyException.class);
         verify(serviceLocator).loadImplementors(eq(ServiceExtension.class), anyBoolean());
     }
 
@@ -206,7 +207,7 @@ class ExtensionLoaderTest {
 
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(depending, someExtension, coreExtension));
 
-        assertThatThrownBy(() -> loader.loadServiceExtensions()).isInstanceOf(EdcException.class).hasMessageContaining("The following injected fields were not provided:\nField \"someService\" of type ");
+        assertThatThrownBy(() -> loader.loadServiceExtensions(context)).isInstanceOf(EdcException.class).hasMessageContaining("The following injected fields were not provided:\nField \"someService\" of type ");
         verify(serviceLocator).loadImplementors(eq(ServiceExtension.class), anyBoolean());
     }
 
@@ -219,7 +220,7 @@ class ExtensionLoaderTest {
 
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(depending, providingExtension, coreExtension));
 
-        var services = loader.loadServiceExtensions();
+        var services = loader.loadServiceExtensions(context);
         assertThat(services).extracting(InjectionContainer::getInjectionTarget).containsExactly(coreExtension, providingExtension, depending);
         verify(serviceLocator).loadImplementors(eq(ServiceExtension.class), anyBoolean());
     }
@@ -231,7 +232,7 @@ class ExtensionLoaderTest {
         var coreService = new SomeExtension();
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(depending, coreService));
 
-        assertThatThrownBy(() -> loader.loadServiceExtensions()).isInstanceOf(EdcException.class);
+        assertThatThrownBy(() -> loader.loadServiceExtensions(context)).isInstanceOf(EdcException.class);
     }
 
     @Test
@@ -242,7 +243,7 @@ class ExtensionLoaderTest {
         var annotatedExtension = new AnnotatedExtension();
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(depending, annotatedExtension, providingExtension, coreExtension));
 
-        var services = loader.loadServiceExtensions();
+        var services = loader.loadServiceExtensions(context);
 
         assertThat(services).extracting(InjectionContainer::getInjectionTarget).containsExactly(coreExtension, providingExtension, depending, annotatedExtension);
         verify(serviceLocator).loadImplementors(eq(ServiceExtension.class), anyBoolean());
@@ -255,7 +256,7 @@ class ExtensionLoaderTest {
 
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(annotatedExtension, coreExtension));
 
-        assertThatThrownBy(() -> loader.loadServiceExtensions()).isNotInstanceOf(EdcInjectionException.class).isInstanceOf(EdcException.class);
+        assertThatThrownBy(() -> loader.loadServiceExtensions(context)).isNotInstanceOf(EdcInjectionException.class).isInstanceOf(EdcException.class);
         verify(serviceLocator).loadImplementors(eq(ServiceExtension.class), anyBoolean());
     }
 
@@ -268,7 +269,7 @@ class ExtensionLoaderTest {
 
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(mixedAnnotation, providingExtension, coreExtension, anotherProvidingExt));
 
-        var services = loader.loadServiceExtensions();
+        var services = loader.loadServiceExtensions(context);
         assertThat(services).extracting(InjectionContainer::getInjectionTarget).containsExactly(coreExtension, providingExtension, anotherProvidingExt, mixedAnnotation);
         verify(serviceLocator).loadImplementors(eq(ServiceExtension.class), anyBoolean());
     }
@@ -281,7 +282,7 @@ class ExtensionLoaderTest {
 
         when(serviceLocator.loadImplementors(eq(ServiceExtension.class), anyBoolean())).thenReturn(mutableListOf(s1, s2, coreExtension));
 
-        assertThatThrownBy(() -> loader.loadServiceExtensions()).isInstanceOf(CyclicDependencyException.class);
+        assertThatThrownBy(() -> loader.loadServiceExtensions(context)).isInstanceOf(CyclicDependencyException.class);
         verify(serviceLocator).loadImplementors(eq(ServiceExtension.class), anyBoolean());
     }
 
@@ -294,9 +295,9 @@ class ExtensionLoaderTest {
         when(defaultProvider.testObject()).thenCallRealMethod();
 
 
-        var context = new DefaultServiceExtensionContext(new TypeManager(), mock(Monitor.class), null, List.of());
+        var context = new DefaultServiceExtensionContext(mock(Monitor.class), List.of());
 
-        var list = TestFunctions.createInjectionContainers(TestFunctions.createList(defaultProvider, dependentExtension));
+        var list = TestFunctions.createInjectionContainers(TestFunctions.createList(defaultProvider, dependentExtension), context);
 
         ExtensionLoader.bootServiceExtensions(list, context);
 
@@ -313,9 +314,9 @@ class ExtensionLoaderTest {
         var nonDefaultProvider = (ProviderExtension) Mockito.spy(TestFunctions.createProviderExtension(false));
         when(nonDefaultProvider.testObject()).thenCallRealMethod();
 
-        var context = new DefaultServiceExtensionContext(new TypeManager(), mock(Monitor.class), null, List.of());
+        var context = new DefaultServiceExtensionContext(mock(Monitor.class), List.of());
 
-        var list = TestFunctions.createInjectionContainers(TestFunctions.createList(defaultProvider, dependentExtension, nonDefaultProvider));
+        var list = TestFunctions.createInjectionContainers(TestFunctions.createList(defaultProvider, dependentExtension, nonDefaultProvider), context);
 
         ExtensionLoader.bootServiceExtensions(list, context);
 
@@ -331,9 +332,9 @@ class ExtensionLoaderTest {
         var nonDefaultProvider = (ProviderExtension) Mockito.spy(TestFunctions.createProviderExtension(false));
         when(nonDefaultProvider.testObject()).thenCallRealMethod();
 
-        var context = new DefaultServiceExtensionContext(new TypeManager(), mock(Monitor.class), null, List.of());
+        var context = new DefaultServiceExtensionContext(mock(Monitor.class), List.of());
 
-        var list = TestFunctions.createInjectionContainers(TestFunctions.createList(dependentExtension, nonDefaultProvider));
+        var list = TestFunctions.createInjectionContainers(TestFunctions.createList(dependentExtension, nonDefaultProvider), context);
 
         ExtensionLoader.bootServiceExtensions(list, context);
 
@@ -348,9 +349,9 @@ class ExtensionLoaderTest {
         var defaultProvider = (ProviderDefaultServicesExtension) Mockito.spy(TestFunctions.createProviderExtension(true));
         when(defaultProvider.testObject()).thenCallRealMethod();
 
-        var context = new DefaultServiceExtensionContext(new TypeManager(), mock(Monitor.class), null, List.of());
+        var context = new DefaultServiceExtensionContext(mock(Monitor.class), List.of());
 
-        var list = TestFunctions.createInjectionContainers(TestFunctions.createList(dependentExtension, defaultProvider));
+        var list = TestFunctions.createInjectionContainers(TestFunctions.createList(dependentExtension, defaultProvider), context);
 
         ExtensionLoader.bootServiceExtensions(list, context);
 
@@ -369,9 +370,9 @@ class ExtensionLoaderTest {
         var provider = (ProviderExtension) Mockito.spy(TestFunctions.createProviderExtension(false));
         when(provider.testObject()).thenCallRealMethod();
 
-        var context = new DefaultServiceExtensionContext(new TypeManager(), mock(Monitor.class), null, List.of());
+        var context = new DefaultServiceExtensionContext(mock(Monitor.class), List.of());
 
-        var list = TestFunctions.createInjectionContainers(TestFunctions.createList(dependentExtension, defaultProvider, provider));
+        var list = TestFunctions.createInjectionContainers(TestFunctions.createList(dependentExtension, defaultProvider, provider), context);
 
         ExtensionLoader.bootServiceExtensions(list, context);
 

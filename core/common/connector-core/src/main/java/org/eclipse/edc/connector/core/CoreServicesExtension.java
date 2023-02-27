@@ -32,33 +32,23 @@ import org.eclipse.edc.runtime.metamodel.annotation.BaseExtension;
 import org.eclipse.edc.runtime.metamodel.annotation.Extension;
 import org.eclipse.edc.runtime.metamodel.annotation.Inject;
 import org.eclipse.edc.runtime.metamodel.annotation.Provider;
-import org.eclipse.edc.runtime.metamodel.annotation.Provides;
 import org.eclipse.edc.runtime.metamodel.annotation.Setting;
 import org.eclipse.edc.spi.agent.ParticipantAgentService;
 import org.eclipse.edc.spi.command.CommandHandlerRegistry;
 import org.eclipse.edc.spi.event.EventRouter;
 import org.eclipse.edc.spi.message.RemoteMessageDispatcherRegistry;
-import org.eclipse.edc.spi.monitor.Monitor;
 import org.eclipse.edc.spi.security.PrivateKeyResolver;
 import org.eclipse.edc.spi.system.ExecutorInstrumentation;
 import org.eclipse.edc.spi.system.Hostname;
 import org.eclipse.edc.spi.system.ServiceExtension;
 import org.eclipse.edc.spi.system.ServiceExtensionContext;
 import org.eclipse.edc.spi.system.health.HealthCheckService;
-import org.eclipse.edc.spi.telemetry.Telemetry;
 import org.eclipse.edc.spi.types.TypeManager;
 
 import java.security.PrivateKey;
-import java.time.Clock;
 import java.time.Duration;
 
 @BaseExtension
-@Provides({
-        Monitor.class,
-        TypeManager.class,
-        Clock.class,
-        Telemetry.class
-})
 @Extension(value = CoreServicesExtension.NAME)
 public class CoreServicesExtension implements ServiceExtension {
 
@@ -85,6 +75,9 @@ public class CoreServicesExtension implements ServiceExtension {
     @Inject
     private EventExecutorServiceContainer eventExecutorServiceContainer;
 
+    @Inject
+    private TypeManager typeManager;
+
     private HealthCheckServiceImpl healthCheckService;
     private RuleBindingRegistry ruleBindingRegistry;
 
@@ -102,7 +95,6 @@ public class CoreServicesExtension implements ServiceExtension {
         healthCheckService = new HealthCheckServiceImpl(config, executorInstrumentation);
         ruleBindingRegistry = new RuleBindingRegistryImpl();
 
-        var typeManager = context.getTypeManager();
         PolicyRegistrationTypes.TYPES.forEach(typeManager::registerTypes);
     }
 

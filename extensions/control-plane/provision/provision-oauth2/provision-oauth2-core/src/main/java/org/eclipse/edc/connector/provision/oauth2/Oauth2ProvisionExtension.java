@@ -20,14 +20,22 @@ import org.eclipse.edc.iam.oauth2.spi.client.Oauth2Client;
 import org.eclipse.edc.runtime.metamodel.annotation.Extension;
 import org.eclipse.edc.runtime.metamodel.annotation.Inject;
 import org.eclipse.edc.spi.security.PrivateKeyResolver;
+import org.eclipse.edc.spi.security.Vault;
 import org.eclipse.edc.spi.system.ServiceExtension;
 import org.eclipse.edc.spi.system.ServiceExtensionContext;
+import org.eclipse.edc.spi.types.TypeManager;
 
 import java.time.Clock;
 
+/**
+ * This extension has been deprecated in favor of "data-plane-http-oauth2"
+ *
+ * @deprecated please use 'data-plane-http-oauth2' instead
+ */
+@Deprecated(since = "milestone9")
 @Extension(value = Oauth2ProvisionExtension.NAME)
 public class Oauth2ProvisionExtension implements ServiceExtension {
-    static final String NAME = "Oauth2 Provision";
+    static final String NAME = "Oauth2 Provision (DEPRECATED: please use 'data-plane-http-oauth2' instead)";
 
     @Inject
     private ResourceManifestGenerator resourceManifestGenerator;
@@ -44,6 +52,12 @@ public class Oauth2ProvisionExtension implements ServiceExtension {
     @Inject
     private Oauth2Client client;
 
+    @Inject
+    private Vault vault;
+
+    @Inject
+    private TypeManager typeManager;
+
     @Override
     public String name() {
         return NAME;
@@ -51,13 +65,13 @@ public class Oauth2ProvisionExtension implements ServiceExtension {
 
     @Override
     public void initialize(ServiceExtensionContext context) {
-        var typeManager = context.getTypeManager();
         typeManager.registerTypes(Oauth2ResourceDefinition.class, Oauth2ProvisionedResource.class);
 
         resourceManifestGenerator.registerGenerator(new Oauth2ProviderResourceDefinitionGenerator());
         resourceManifestGenerator.registerGenerator(new Oauth2ConsumerResourceDefinitionGenerator());
 
-        provisionManager.register(new Oauth2Provisioner(client, privateKeyResolver, clock));
+        var requestFactory = new Oauth2CredentialsRequestFactory(privateKeyResolver, clock, vault, context.getMonitor());
+        provisionManager.register(new Oauth2Provisioner(client, requestFactory));
     }
 
 }

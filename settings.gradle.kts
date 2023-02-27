@@ -119,6 +119,7 @@ include(":extensions:common:sql:sql-pool:sql-pool-apache-commons")
 include(":extensions:common:transaction")
 include(":extensions:common:transaction:transaction-atomikos")
 include(":extensions:common:transaction:transaction-local")
+include(":extensions:common:vault:vault-aws")
 include(":extensions:common:vault:vault-azure")
 include(":extensions:common:vault:vault-filesystem")
 include(":extensions:common:vault:vault-hashicorp")
@@ -161,12 +162,13 @@ include(":extensions:data-plane:data-plane-client")
 include(":extensions:data-plane:data-plane-azure-storage")
 include(":extensions:data-plane:data-plane-azure-data-factory")
 include(":extensions:data-plane:data-plane-http")
+include(":extensions:data-plane:data-plane-http-oauth2")
+include(":extensions:data-plane:data-plane-http-oauth2-core")
 include(":extensions:data-plane:data-plane-aws-s3")
 include(":extensions:data-plane:data-plane-google-storage")
 include(":extensions:data-plane:data-plane-integration-tests")
 include(":extensions:data-plane:store:sql:data-plane-store-sql")
 include(":extensions:data-plane:store:cosmos:data-plane-store-cosmos")
-
 
 
 include(":extensions:data-plane-selector:data-plane-selector-api")
@@ -202,8 +204,8 @@ include(":spi:control-plane:policy-spi")
 include(":spi:control-plane:transfer-spi")
 include(":spi:control-plane:control-plane-api-client-spi")
 
-
 include(":spi:data-plane:data-plane-spi")
+include(":spi:data-plane:data-plane-http-spi")
 
 include(":spi:data-plane-selector:data-plane-selector-spi")
 

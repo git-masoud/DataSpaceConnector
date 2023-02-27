@@ -19,6 +19,7 @@ import org.eclipse.edc.connector.transfer.spi.provision.ProvisionManager;
 import org.eclipse.edc.connector.transfer.spi.provision.ResourceManifestGenerator;
 import org.eclipse.edc.connector.transfer.spi.types.DataRequest;
 import org.eclipse.edc.connector.transfer.spi.types.ProvisionResponse;
+import org.eclipse.edc.iam.oauth2.spi.Oauth2DataAddressSchema;
 import org.eclipse.edc.iam.oauth2.spi.client.Oauth2Client;
 import org.eclipse.edc.junit.extensions.EdcExtension;
 import org.eclipse.edc.policy.model.Policy;
@@ -26,6 +27,7 @@ import org.eclipse.edc.runtime.metamodel.annotation.Provider;
 import org.eclipse.edc.spi.iam.TokenRepresentation;
 import org.eclipse.edc.spi.response.StatusResult;
 import org.eclipse.edc.spi.result.Result;
+import org.eclipse.edc.spi.security.Vault;
 import org.eclipse.edc.spi.system.ServiceExtension;
 import org.eclipse.edc.spi.types.domain.DataAddress;
 import org.eclipse.edc.spi.types.domain.HttpDataAddress;
@@ -46,8 +48,11 @@ import static org.mockito.Mockito.when;
 @ExtendWith(EdcExtension.class)
 class Oauth2ProvisionExtensionTest {
 
+    private final Vault vault = mock(Vault.class);
+
     @BeforeEach
     void setUp(EdcExtension extension) {
+        extension.registerServiceMock(Vault.class, vault);
         extension.registerSystemExtension(ServiceExtension.class, new TestExtension());
     }
 
@@ -74,9 +79,10 @@ class Oauth2ProvisionExtensionTest {
 
     @Test
     void oauth2Provisioner(ProvisionManager provisionManager) {
+        when(vault.resolveSecret(any())).thenReturn("aSecret");
         var dataAddress = HttpDataAddress.Builder.newInstance()
                 .property(Oauth2DataAddressSchema.CLIENT_ID, "any")
-                .property(Oauth2DataAddressSchema.CLIENT_SECRET, "any")
+                .property(Oauth2DataAddressSchema.CLIENT_SECRET_KEY, "any")
                 .property(Oauth2DataAddressSchema.TOKEN_URL, "http://any/url")
                 .build();
         var resourceDefinition = Oauth2ResourceDefinition.Builder.newInstance()
@@ -96,7 +102,7 @@ class Oauth2ProvisionExtensionTest {
     private DataAddress validOauth2DataAddress() {
         return HttpDataAddress.Builder.newInstance()
                 .property(Oauth2DataAddressSchema.CLIENT_ID, "clientId")
-                .property(Oauth2DataAddressSchema.CLIENT_SECRET, "clientSecret")
+                .property(Oauth2DataAddressSchema.CLIENT_SECRET_KEY, "clientSecretKey")
                 .property(Oauth2DataAddressSchema.TOKEN_URL, "tokenUrl")
                 .build();
     }

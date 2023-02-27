@@ -28,18 +28,21 @@ import org.eclipse.edc.connector.policy.spi.store.PolicyDefinitionStore;
 import org.eclipse.edc.policy.model.Policy;
 import org.eclipse.edc.spi.agent.ParticipantAgentService;
 import org.eclipse.edc.spi.asset.AssetIndex;
+import org.eclipse.edc.spi.monitor.Monitor;
 import org.eclipse.edc.spi.query.QuerySpec;
 import org.eclipse.edc.spi.types.domain.asset.Asset;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static java.util.stream.Stream.concat;
 
 /**
@@ -51,57 +54,54 @@ public class ContractOfferResolverImpl implements ContractOfferResolver {
     private final AssetIndex assetIndex;
     private final PolicyDefinitionStore policyStore;
     private final Clock clock;
+    private final Monitor monitor;
 
-    public ContractOfferResolverImpl(ParticipantAgentService agentService, ContractDefinitionService definitionService, AssetIndex assetIndex, PolicyDefinitionStore policyStore, Clock clock) {
+    public ContractOfferResolverImpl(ParticipantAgentService agentService, ContractDefinitionService definitionService, AssetIndex assetIndex, PolicyDefinitionStore policyStore, Clock clock, Monitor monitor) {
         this.agentService = agentService;
         this.definitionService = definitionService;
         this.assetIndex = assetIndex;
         this.policyStore = policyStore;
         this.clock = clock;
+        this.monitor = monitor;
     }
 
     @Override
     @NotNull
     public Stream<ContractOffer> queryContractOffers(ContractOfferQuery query) {
         var agent = agentService.createFor(query.getClaimToken());
+
+        var numFetchedAssets = new AtomicLong(0);
         var numSeenAssets = new AtomicLong(0);
+
         var range = query.getRange();
-        var limit = range.getTo() - range.getFrom();
-        var skip = new AtomicInteger(range.getFrom());
+        var offset = Long.valueOf(range.getFrom());
+        var limit = Long.valueOf(range.getTo() - range.getFrom());
 
         return definitionService.definitionsFor(agent)
-                .takeWhile(d -> numSeenAssets.get() < range.getTo())
+                .takeWhile(d -> numFetchedAssets.get() < limit)
                 .flatMap(definition -> {
-                    var criteria = definition.getSelectorExpression().getCriteria();
 
+                    var criteria = definition.getSelectorExpression().getCriteria();
                     var querySpecBuilder = QuerySpec.Builder.newInstance()
                             .filter(concat(criteria.stream(), query.getAssetsCriteria().stream()).collect(Collectors.toList()));
-
                     var querySpec = querySpecBuilder.build();
                     var numAssets = assetIndex.countAssets(querySpec.getFilterExpression());
 
-                    querySpecBuilder.limit((int) numAssets);
+                    var dynamicOffset = max(0L, offset - numSeenAssets.get());
+                    var dynamicLimit = min(limit - numFetchedAssets.get(), max(0, numAssets - dynamicOffset));
 
-                    if (skip.get() > 0) {
-                        querySpecBuilder.offset(skip.get());
-                    }
-                    if (numAssets + numSeenAssets.get() > limit) {
-                        querySpecBuilder.limit(limit);
-                    }
+                    querySpecBuilder.offset(Long.valueOf(dynamicOffset).intValue());
+                    querySpecBuilder.limit(Long.valueOf(dynamicLimit).intValue());
 
-                    Stream<ContractOffer> offers;
-                    if (skip.get() >= numAssets) {
-                        offers = Stream.empty();
-                    } else {
-                        offers = createContractOffers(definition, querySpecBuilder.build())
-                                .map(offerBuilder -> offerBuilder
-                                        .provider(query.getProvider())
-                                        .consumer(query.getConsumer())
-                                        .build());
-                    }
+                    var offers = dynamicOffset >= numAssets ? Stream.<ContractOffer>empty() :
+                            createContractOffers(definition, querySpecBuilder.build())
+                                    .map(offerBuilder -> offerBuilder.provider(query.getProvider())
+                                            .consumer(query.getConsumer())
+                                            .build());
 
+                    numFetchedAssets.addAndGet(dynamicLimit);
                     numSeenAssets.addAndGet(numAssets);
-                    skip.addAndGet(Long.valueOf(-numAssets).intValue());
+
                     return offers;
                 });
     }
@@ -117,11 +117,28 @@ public class ContractOfferResolverImpl implements ContractOfferResolver {
 
     @NotNull
     private ContractOffer.Builder createContractOffer(ContractDefinition definition, Policy policy, Asset asset) {
+
+        var contractEndTime = calculateContractEnd(definition);
+
         return ContractOffer.Builder.newInstance()
                 .id(ContractId.createContractId(definition.getId()))
                 .policy(policy.withTarget(asset.getId()))
                 .asset(asset)
                 .contractStart(ZonedDateTime.now())
-                .contractEnd(ZonedDateTime.ofInstant(clock.instant().plusSeconds(definition.getValidity()), clock.getZone()));
+                .contractEnd(contractEndTime);
     }
+
+    @NotNull
+    private ZonedDateTime calculateContractEnd(ContractDefinition definition) {
+
+        var contractEndTime = Instant.ofEpochMilli(Long.MAX_VALUE).atZone(clock.getZone());
+        try {
+            contractEndTime = ZonedDateTime.ofInstant(clock.instant().plusSeconds(definition.getValidity()), clock.getZone());
+        } catch (ArithmeticException exception) {
+            monitor.warning("The added ContractEnd value is bigger than the maximum number allowed by a long value. " +
+                    "Changing contractEndTime to Maximum value possible in the ContractOffer");
+        }
+        return contractEndTime;
+    }
+
 }
