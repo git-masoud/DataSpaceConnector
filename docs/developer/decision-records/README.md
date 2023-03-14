@@ -51,3 +51,7 @@
 - [2023-02-10 Nightly Builds](2023-02-10-nightly-builds/)
 - [2023-02-22 Contract Definition Validation](2023-02-22-contract-definition-validation/)
 - [2023-02-22 Update Entities](2023-02-22-update-entities/)
+- [2023-02-27 Dataspace Protocol TransferProcess state transitions](2023-02-27-dataspace-protocol-transferprocess-state-transitions)
+- [2023-03-02 Entity Store Refactoring](2023-03-02_entity_store_refactoring)
+- [2023-03-09-Event Framework Refactoring](2023-03-09-event-framework-refactoring)
+
