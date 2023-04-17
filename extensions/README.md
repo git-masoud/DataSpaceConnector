@@ -45,6 +45,7 @@
     - Vault
         - [Azure](common/vault/vault-azure/)
         - [Filesystem](common/vault/vault-filesystem/)
+        - [GCP](common/vault/vault-gcp/)
         - [HashiCorp](common/vault/vault-hashicorp/)
 - Control Plane
     - [Management API](control-plane/api/management-api/)
