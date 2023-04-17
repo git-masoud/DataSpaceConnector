@@ -32,15 +32,25 @@ public class GcsConsumerResourceDefinitionGenerator implements ConsumerResourceD
     public @Nullable
     ResourceDefinition generate(DataRequest dataRequest, Policy policy) {
         Objects.requireNonNull(dataRequest, "dataRequest must always be provided");
-        Objects.requireNonNull(policy, "policy must always be provided");
 
         var destination = dataRequest.getDataDestination();
         var id = randomUUID().toString();
         var location = destination.getProperty(GcsStoreSchema.LOCATION);
         var storageClass = destination.getProperty(GcsStoreSchema.STORAGE_CLASS);
+        var projectId = destination.getProperty(GcsStoreSchema.PROJECT_ID);
+        var bucketName = destination.getProperty(GcsStoreSchema.BUCKET_NAME);
+        var tokenKeyName = destination.getKeyName();
+        var serviceAccountKeyName = destination.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_NAME);
+        var serviceAccountKeyValue = destination.getProperty(GcsStoreSchema.SERVICE_ACCOUNT_KEY_VALUE);
 
         return GcsResourceDefinition.Builder.newInstance().id(id).location(location)
-                .storageClass(storageClass).build();
+                .storageClass(storageClass)
+                .projectId(projectId)
+                .bucketName(bucketName)
+                .tokenKeyName(tokenKeyName)
+                .serviceAccountKeyName(serviceAccountKeyName)
+                .serviceAccountKeyValue(serviceAccountKeyValue)
+                .build();
     }
 
     @Override

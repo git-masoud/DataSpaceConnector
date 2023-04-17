@@ -16,6 +16,8 @@
         - [Event Grid](common/azure/azure-eventgrid/)
         - [Resource Manager](common/azure/azure-resource-manager/)
         - [Test](common/azure/azure-test/)
+    - GCP
+        - [GCP Core](common/gcp/gcp-core)
     - Configuration
         - [Filesystem](common/configuration/configuration-filesystem/)
     - Events
@@ -60,6 +62,7 @@
         - [Blob](control-plane/provision/provision-blob/)
         - [HTTP](control-plane/provision/provision-http/)
         - [S3](control-plane/provision/provision-aws-s3/)
+        - [GCP](control-plane/provision/provision-gcs/)
     - Store
         - Cosmos
             - [Asset Index](control-plane/store/cosmos/asset-index-cosmos/)
@@ -81,6 +84,7 @@
     - [Data Factory](data-plane/data-plane-azure-data-factory/)
     - [HTTP](data-plane/data-plane-http/)
     - [S3](data-plane/data-plane-aws-s3/)
+    - [GCP](data-plane/data-plane-google-storage)
     - [Tests](data-plane/data-plane-integration-tests/)
 - Data Plane Selector
     - [API](data-plane-selector/data-plane-selector-api/)
