@@ -122,6 +122,7 @@ include(":extensions:common:transaction:transaction-local")
 include(":extensions:common:vault:vault-aws")
 include(":extensions:common:vault:vault-azure")
 include(":extensions:common:vault:vault-filesystem")
+include(":extensions:common:vault:vault-gcp")
 include(":extensions:common:vault:vault-hashicorp")
 
 include(":extensions:common:api:control-api-configuration")
