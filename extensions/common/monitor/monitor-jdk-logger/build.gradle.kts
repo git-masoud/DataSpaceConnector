@@ -19,6 +19,7 @@ plugins {
 
 dependencies {
     api(project(":spi:common:core-spi"))
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.15.0") // Added Jackson
 }
 
 

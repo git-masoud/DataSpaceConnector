@@ -1,0 +1,2 @@
+# Register TransactionManagerLogExtension
+org.eclipse.edc.monitor.transaction.TransactionManagerLogExtension
