@@ -136,6 +136,7 @@ include(":extensions:common:validator:validator-data-address-http-data")
 include(":extensions:common:validator:validator-data-address-kafka")
 include(":extensions:common:vault:vault-filesystem")
 include(":extensions:common:vault:vault-hashicorp")
+include(":extensions:transaction-observer") // <-- NEW LINE
 
 include(":extensions:common:api:control-api-configuration")
 include(":extensions:common:api:management-api-configuration")
