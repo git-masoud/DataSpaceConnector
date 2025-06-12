@@ -108,33 +108,41 @@ public class OffersObserverTest {
     @Test
     void testAssetUpdated_matchingContract_sendsEvent() throws IOException {
         // Arrange
-        Map<String, Object> assetProps = Map.of("asset:prop:id", TEST_ASSET_ID, "edc:name", "Test Asset");
+        Map<String, Object> assetProps = Map.of("asset:prop:id", TEST_ASSET_ID, "edc:name", "Test Asset", "another:prop", "value");
         Asset mockAsset = createMockAsset(TEST_ASSET_ID, assetProps);
 
-        List<Criterion> assetSelector = Collections.singletonList(new Criterion("asset:prop:id", "=", TEST_ASSET_ID));
-        ContractDefinition mockContractDefinition = createMockContractDefinition(TEST_CONTRACT_DEFINITION_ID, "accessPolicyId", TEST_POLICY_ID, assetSelector);
+        // This selector will be used by the in-memory matchesAsset()
+        List<Criterion> fullAssetSelector = List.of(
+            new Criterion("asset:prop:id", "=", TEST_ASSET_ID),
+            new Criterion("another:prop", "=", "value")
+        );
+        ContractDefinition mockContractDefinition = createMockContractDefinition(TEST_CONTRACT_DEFINITION_ID, "accessPolicyId", TEST_POLICY_ID, fullAssetSelector);
         PolicyDefinition mockPolicyDefinition = createMockPolicyDefinition(TEST_POLICY_ID);
 
-        when(contractDefinitionStore.findAll(any(QuerySpec.class))).thenReturn(List.of(mockContractDefinition).stream());
+        // Mock the DB pre-filter
+        when(contractDefinitionStore.findAll(any(QuerySpec.class))).thenReturn(Stream.of(mockContractDefinition));
+
         when(policyDefinitionStore.findById(TEST_POLICY_ID)).thenReturn(mockPolicyDefinition);
         when(okHttpClient.newCall(any(Request.class))).thenReturn(mockCall);
         when(mockCall.execute()).thenReturn(mockResponse);
         when(mockResponse.isSuccessful()).thenReturn(true);
-        when(mockResponse.body()).thenReturn(ResponseBody.create("", MediaType.parse("application/json")));
+        when(mockResponse.body()).thenReturn(ResponseBody.create("{}", MediaType.parse("application/json")));
 
 
         // Act
-        offersObserver.updated(mockAsset, null); // AssetListener takes (Asset newAsset, Asset oldAsset)
+        offersObserver.updated(mockAsset, null);
 
         // Assert
         verify(contractDefinitionStore).findAll(querySpecCaptor.capture());
         QuerySpec capturedSpec = querySpecCaptor.getValue();
-        assertTrue(capturedSpec.getFilterExpression().isEmpty(), "QuerySpec should have no filter for asset updated event.");
-        assertEquals(0, capturedSpec.getOffset());
-        assertEquals(Integer.MAX_VALUE, capturedSpec.getLimit()); // Default QuerySpec limit
+        assertEquals(1, capturedSpec.getFilterExpression().size());
+        Criterion capturedCriterion = capturedSpec.getFilterExpression().get(0);
+        assertEquals("assetsSelector.operandRight", capturedCriterion.getOperandLeft());
+        assertEquals("=", capturedCriterion.getOperator());
+        assertEquals(TEST_ASSET_ID, capturedCriterion.getOperandRight());
 
         verify(policyDefinitionStore).findById(TEST_POLICY_ID);
-        verify(objectMapper).writeValueAsString(any(Map.class));
+        verify(objectMapper).writeValueAsString(any(Map.class)); // Ensure payload construction was attempted
         verify(okHttpClient).newCall(requestCaptor.capture());
         verify(mockCall).execute();
 
@@ -145,20 +153,76 @@ public class OffersObserverTest {
     }
 
     @Test
-    void testAssetUpdated_noMatchingContract_doesNotSendEvent() throws IOException {
+    void testAssetUpdated_dbFilterMatches_InMemoryCheckFails_doesNotSendEvent() throws IOException {
         // Arrange
-        Asset mockAsset = createMockAsset(TEST_ASSET_ID, Map.of("asset:prop:id", "someOtherId"));
-        List<Criterion> assetSelector = Collections.singletonList(new Criterion("asset:prop:id", "=", TEST_ASSET_ID));
-        ContractDefinition mockContractDefinition = createMockContractDefinition(TEST_CONTRACT_DEFINITION_ID, "accessPolicyId", TEST_POLICY_ID, assetSelector);
+        Map<String, Object> assetProps = Map.of("asset:prop:id", TEST_ASSET_ID, "another:prop", "wrong_value");
+        Asset mockAsset = createMockAsset(TEST_ASSET_ID, assetProps);
 
-        when(contractDefinitionStore.findAll(any(QuerySpec.class))).thenReturn(List.of(mockContractDefinition).stream());
-        // No need to mock policyDefinitionStore, objectMapper, or okHttpClient if no match is expected
+        // This selector will be used by the in-memory matchesAsset()
+        // One criterion matches (used for DB query), one doesn't.
+        List<Criterion> fullAssetSelector = List.of(
+            new Criterion("asset:prop:id", "=", TEST_ASSET_ID), // This would match assetId for DB query
+            new Criterion("another:prop", "=", "correct_value")  // This will fail in-memory check
+        );
+        ContractDefinition mockContractDefinition = createMockContractDefinition(TEST_CONTRACT_DEFINITION_ID, "accessPolicyId", TEST_POLICY_ID, fullAssetSelector);
+
+        when(contractDefinitionStore.findAll(any(QuerySpec.class))).thenReturn(Stream.of(mockContractDefinition));
 
         // Act
         offersObserver.updated(mockAsset, null);
 
         // Assert
-        verify(contractDefinitionStore).findAll(any(QuerySpec.class));
+        verify(contractDefinitionStore).findAll(querySpecCaptor.capture());
+        // We expect the DB query to use asset ID
+        assertEquals("assetsSelector.operandRight", querySpecCaptor.getValue().getFilterExpression().get(0).getOperandLeft());
+        assertEquals(TEST_ASSET_ID, querySpecCaptor.getValue().getFilterExpression().get(0).getOperandRight());
+
+        verify(policyDefinitionStore, never()).findById(anyString());
+        verify(okHttpClient, never()).newCall(any(Request.class));
+    }
+
+    @Test
+    void testAssetUpdated_dbFilterNoMatches_doesNotSendEvent() throws IOException {
+        // Arrange
+        Asset mockAsset = createMockAsset(TEST_ASSET_ID, Map.of("asset:prop:id", TEST_ASSET_ID));
+
+        when(contractDefinitionStore.findAll(any(QuerySpec.class))).thenReturn(Stream.empty()); // No contract definitions returned by DB query
+
+        // Act
+        offersObserver.updated(mockAsset, null);
+
+        // Assert
+        verify(contractDefinitionStore).findAll(querySpecCaptor.capture());
+         assertEquals("assetsSelector.operandRight", querySpecCaptor.getValue().getFilterExpression().get(0).getOperandLeft());
+        assertEquals(TEST_ASSET_ID, querySpecCaptor.getValue().getFilterExpression().get(0).getOperandRight());
+
+        verifyNoInteractions(policyDefinitionStore, objectMapper, okHttpClient); // No further processing
+    }
+
+    // Renamed original testAssetUpdated_noMatchingContract_doesNotSendEvent to this, as it's now covered by dbFilterNoMatches
+    @Test
+    void testAssetUpdated_fullInMemoryCheckFails_doesNotSendEvent() throws IOException {
+        // Arrange
+        Map<String, Object> assetProps = Map.of("asset:prop:id", "someOtherId"); // Asset ID does not match
+        Asset mockAsset = createMockAsset("otherAssetId", assetProps);
+
+        List<Criterion> assetSelector = Collections.singletonList(new Criterion("asset:prop:id", "=", TEST_ASSET_ID));
+        ContractDefinition mockContractDefinition = createMockContractDefinition(TEST_CONTRACT_DEFINITION_ID, "accessPolicyId", TEST_POLICY_ID, assetSelector);
+
+        // DB query is based on newAsset.getId() which is "otherAssetId"
+        // This mock simulates that the DB query (based on "otherAssetId") found a contract definition.
+        // However, this contract definition's selector is for TEST_ASSET_ID.
+        // The matchesAsset() check will then fail.
+        when(contractDefinitionStore.findAll(argThat(qs ->
+            qs.getFilterExpression().get(0).getOperandRight().equals("otherAssetId")
+        ))).thenReturn(Stream.of(mockContractDefinition));
+
+
+        // Act
+        offersObserver.updated(mockAsset, null);
+
+        // Assert
+        verify(contractDefinitionStore).findAll(any(QuerySpec.class)); // Verifies DB query was made
         verify(policyDefinitionStore, never()).findById(anyString());
         verify(objectMapper, never()).writeValueAsString(any(Map.class));
         verify(okHttpClient, never()).newCall(any(Request.class));

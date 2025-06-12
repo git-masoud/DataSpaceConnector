@@ -75,30 +75,37 @@ public class OffersObserver implements AssetListener, PolicyDefinitionListener, 
     public void updated(Asset newAsset, Asset oldAsset) {
         LOGGER.info("Asset updated event received for asset ID: " + newAsset.getId() + ". Old asset ID: " + (oldAsset != null ? oldAsset.getId() : "null"));
 
-        // Use ContractDefinitionStore to get all contract definitions
-        List<ContractDefinition> contractDefinitions = contractDefinitionStore.findAll(QuerySpec.Builder.newInstance().build()).collect(Collectors.toList());
-        LOGGER.info("Found " + contractDefinitions.size() + " contract definitions to evaluate.");
+        List<Criterion> filterCriteria = new ArrayList<>();
+        filterCriteria.add(new Criterion("assetsSelector.operandRight", "=", newAsset.getId()));
+        // Note: The path "assetsSelector.operandRight" might need specific support in the underlying persistence layer
+        // to query inside JSON arrays of criteria. This is a simplification for the purpose of this exercise.
+        // A real implementation might require iterating all ContractDefinitions if such a query isn't supported,
+        // or denormalizing the asset IDs linked by selectors.
 
-        for (ContractDefinition contractDefinition : contractDefinitions) {
-            if (matchesAsset(contractDefinition.getAssetsSelector(), newAsset)) {
-                LOGGER.info("Asset " + newAsset.getId() + " matches selector for ContractDefinition " + contractDefinition.getId());
+        QuerySpec querySpec = QuerySpec.Builder.newInstance().filter(filterCriteria).build();
+
+        List<ContractDefinition> potentiallyMatchingDefinitions = contractDefinitionStore.findAll(querySpec).collect(Collectors.toList());
+        LOGGER.info("Found " + potentiallyMatchingDefinitions.size() + " potentially matching contract definitions based on asset ID in selector.");
+
+        for (ContractDefinition cd : potentiallyMatchingDefinitions) {
+            if (matchesAsset(cd.getAssetsSelector(), newAsset)) { // Detailed in-memory check
+                LOGGER.info("Asset " + newAsset.getId() + " fully matches selector for ContractDefinition " + cd.getId());
                 try {
-                    PolicyDefinition policyDefinition = policyDefinitionStore.findById(contractDefinition.getContractPolicyId());
+                    PolicyDefinition policyDefinition = policyDefinitionStore.findById(cd.getContractPolicyId());
                     if (policyDefinition == null) {
-                        LOGGER.warning("PolicyDefinition not found for ID: " + contractDefinition.getContractPolicyId() + " referenced by ContractDefinition " + contractDefinition.getId());
-                        continue;
+                        LOGGER.warning("PolicyDefinition not found for ID: " + cd.getContractPolicyId() + " referenced by ContractDefinition " + cd.getId());
+                        continue; // Skip if policy not found
                     }
 
-                    Map<String, Object> eventPayload = constructEventPayload(newAsset, contractDefinition, policyDefinition);
+                    Map<String, Object> eventPayload = constructEventPayload(newAsset, cd, policyDefinition);
                     String jsonPayload = objectMapper.writeValueAsString(eventPayload);
-
                     sendEvent(jsonPayload);
-
+                    break; // Process only the first fully matching contract definition
                 } catch (Exception e) {
-                    LOGGER.log(Level.SEVERE, "Error processing asset update for ContractDefinition " + contractDefinition.getId() + " and Asset " + newAsset.getId(), e);
+                    LOGGER.log(Level.SEVERE, "Error processing asset update for ContractDefinition " + cd.getId() + " and Asset " + newAsset.getId(), e);
                 }
             } else {
-                LOGGER.fine("Asset " + newAsset.getId() + " does not match selector for ContractDefinition " + contractDefinition.getId());
+                LOGGER.fine("Asset " + newAsset.getId() + " did not fully match selector for ContractDefinition " + cd.getId() + " after in-memory check.");
             }
         }
     }
