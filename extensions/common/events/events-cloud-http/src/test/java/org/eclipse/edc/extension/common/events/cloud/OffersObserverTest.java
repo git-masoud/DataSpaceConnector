@@ -127,7 +127,12 @@ public class OffersObserverTest {
         offersObserver.updated(mockAsset, null); // AssetListener takes (Asset newAsset, Asset oldAsset)
 
         // Assert
-        verify(contractDefinitionStore).findAll(any(QuerySpec.class));
+        verify(contractDefinitionStore).findAll(querySpecCaptor.capture());
+        QuerySpec capturedSpec = querySpecCaptor.getValue();
+        assertTrue(capturedSpec.getFilterExpression().isEmpty(), "QuerySpec should have no filter for asset updated event.");
+        assertEquals(0, capturedSpec.getOffset());
+        assertEquals(Integer.MAX_VALUE, capturedSpec.getLimit()); // Default QuerySpec limit
+
         verify(policyDefinitionStore).findById(TEST_POLICY_ID);
         verify(objectMapper).writeValueAsString(any(Map.class));
         verify(okHttpClient).newCall(requestCaptor.capture());

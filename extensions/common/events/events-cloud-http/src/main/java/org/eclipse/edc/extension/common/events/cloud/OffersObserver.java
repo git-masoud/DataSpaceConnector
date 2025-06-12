@@ -76,7 +76,7 @@ public class OffersObserver implements AssetListener, PolicyDefinitionListener, 
         LOGGER.info("Asset updated event received for asset ID: " + newAsset.getId() + ". Old asset ID: " + (oldAsset != null ? oldAsset.getId() : "null"));
 
         // Use ContractDefinitionStore to get all contract definitions
-        List<ContractDefinition> contractDefinitions = contractDefinitionStore.findAll(QuerySpec.Builder.newInstance().build()).toList();
+        List<ContractDefinition> contractDefinitions = contractDefinitionStore.findAll(QuerySpec.Builder.newInstance().build()).collect(Collectors.toList());
         LOGGER.info("Found " + contractDefinitions.size() + " contract definitions to evaluate.");
 
         for (ContractDefinition contractDefinition : contractDefinitions) {
