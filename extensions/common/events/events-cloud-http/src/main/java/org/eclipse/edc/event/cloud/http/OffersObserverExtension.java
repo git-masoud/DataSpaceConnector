@@ -16,7 +16,7 @@ package org.eclipse.edc.event.cloud.http;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.edc.connector.asset.spi.observe.AssetObservable;
-import org.eclipse.edc.connector.asset.spi.store.AssetStore;
+import org.eclipse.edc.connector.asset.spi.index.AssetIndex; // Changed from AssetStore
 import org.eclipse.edc.connector.contract.spi.definition.observe.ContractDefinitionObservable;
 import org.eclipse.edc.connector.contract.spi.offer.ContractDefinitionResolver;
 import org.eclipse.edc.connector.contract.spi.store.ContractDefinitionStore;
@@ -80,7 +80,7 @@ public class OffersObserverExtension implements ServiceExtension {
     private ContractDefinitionStore contractDefinitionStore;
 
     @Inject(required = false)
-    private AssetStore assetStore;
+    private AssetIndex assetIndex; // Changed from AssetStore
 
     @Inject(required = false)
     private PolicyDefinitionStore policyDefinitionStore;
@@ -111,11 +111,11 @@ public class OffersObserverExtension implements ServiceExtension {
 
         // Check for required dependencies for OffersObserver
         if (Stream.of(assetObservable, policyDefinitionObservable, contractDefinitionObservable,
-                     contractDefinitionResolver, contractDefinitionStore, assetStore, policyDefinitionStore, edcHttpClient, typeManager)
+                     contractDefinitionResolver, contractDefinitionStore, assetIndex, policyDefinitionStore, edcHttpClient, typeManager) // Changed assetStore to assetIndex
                      .anyMatch(Objects::isNull)) {
             monitor.severe("OffersObserver not initialized due to missing one or more core dependencies. " +
                            "Please ensure AssetObservable, PolicyDefinitionObservable, ContractDefinitionObservable, " +
-                           "ContractDefinitionResolver, ContractDefinitionStore, AssetStore, PolicyDefinitionStore, " +
+                           "ContractDefinitionResolver, ContractDefinitionStore, AssetIndex, PolicyDefinitionStore, " + // Changed AssetStore to AssetIndex
                            "EdcHttpClient, and TypeManager are available.");
             return;
         }
@@ -125,7 +125,7 @@ public class OffersObserverExtension implements ServiceExtension {
         OffersObserver offersObserver = new OffersObserver(
                 contractDefinitionResolver,
                 contractDefinitionStore,
-                assetStore,
+                assetIndex, // Changed from assetStore
                 policyDefinitionStore,
                 edcHttpClient.getHttpClient(), // Pass the underlying OkHttpClient
                 objectMapper,

@@ -3,7 +3,7 @@ package org.eclipse.edc.extension.common.events.cloud;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.OkHttpClient;
 import org.eclipse.edc.connector.asset.spi.observe.AssetListener;
-import org.eclipse.edc.connector.asset.spi.store.AssetStore;
+import org.eclipse.edc.connector.asset.spi.index.AssetIndex; // Changed from AssetStore
 import org.eclipse.edc.connector.contract.spi.definition.observe.ContractDefinitionListener;
 import org.eclipse.edc.connector.contract.spi.offer.ContractDefinitionResolver;
 import org.eclipse.edc.connector.policy.spi.observe.PolicyDefinitionListener;
@@ -28,16 +28,17 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-
+// Added missing class declaration, assuming it was accidentally removed by previous diff
 public class OffersObserver implements AssetListener, PolicyDefinitionListener, ContractDefinitionListener {
-
     private static final Logger LOGGER = Logger.getLogger(OffersObserver.class.getName());
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
     private final ContractDefinitionResolver contractDefinitionResolver; // Will be used as intended, or might need ContractDefinitionStore
     private final ContractDefinitionStore contractDefinitionStore; // Added
-    private final AssetStore assetStore;
+    private final AssetIndex assetIndex; // Changed from AssetStore
     private final PolicyDefinitionStore policyDefinitionStore;
     private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -45,14 +46,14 @@ public class OffersObserver implements AssetListener, PolicyDefinitionListener, 
 
     public OffersObserver(ContractDefinitionResolver contractDefinitionResolver,
                            ContractDefinitionStore contractDefinitionStore, // Added
-                           AssetStore assetStore,
+                           AssetIndex assetIndex, // Changed from AssetStore
                            PolicyDefinitionStore policyDefinitionStore,
                            OkHttpClient httpClient,
                            ObjectMapper objectMapper,
                            String apiEndpointUrl) {
         this.contractDefinitionResolver = contractDefinitionResolver;
         this.contractDefinitionStore = contractDefinitionStore; // Added
-        this.assetStore = assetStore;
+        this.assetIndex = assetIndex; // Changed from AssetStore
         this.policyDefinitionStore = policyDefinitionStore;
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
@@ -75,7 +76,7 @@ public class OffersObserver implements AssetListener, PolicyDefinitionListener, 
         LOGGER.info("Asset updated event received for asset ID: " + newAsset.getId() + ". Old asset ID: " + (oldAsset != null ? oldAsset.getId() : "null"));
 
         // Use ContractDefinitionStore to get all contract definitions
-        List<ContractDefinition> contractDefinitions = contractDefinitionStore.findAll(QuerySpec.max()).toList();
+        List<ContractDefinition> contractDefinitions = contractDefinitionStore.findAll(QuerySpec.Builder.newInstance().build()).toList();
         LOGGER.info("Found " + contractDefinitions.size() + " contract definitions to evaluate.");
 
         for (ContractDefinition contractDefinition : contractDefinitions) {
@@ -221,35 +222,72 @@ public class OffersObserver implements AssetListener, PolicyDefinitionListener, 
 
     @Override
     public void updated(PolicyDefinition newPolicyDefinition, PolicyDefinition oldPolicyDefinition) {
-        LOGGER.info("PolicyDefinition updated event received for policy ID: " + newPolicyDefinition.getUid() + ". Old policy ID: " + (oldPolicyDefinition != null ? oldPolicyDefinition.getUid() : "null"));
+        LOGGER.info("PolicyDefinition updated event received for policy ID: " + newPolicyDefinition.getUid() +
+                ". Old policy ID: " + (oldPolicyDefinition != null ? oldPolicyDefinition.getUid() : "null"));
 
-        List<ContractDefinition> contractDefinitions = contractDefinitionStore.findAll(QuerySpec.max()).toList();
-        LOGGER.fine("Found " + contractDefinitions.size() + " contract definitions to evaluate for policy update.");
+        // 1. Fetch ContractDefinitions by Policy ID
+        QuerySpec querySpecAccessPolicy = QuerySpec.Builder.newInstance()
+                .filter(List.of(new Criterion("accessPolicyId", "=", newPolicyDefinition.getUid())))
+                .build();
+        Stream<ContractDefinition> cdByAccessPolicyStream = contractDefinitionStore.findAll(querySpecAccessPolicy);
+        LOGGER.fine("Found contract definitions by accessPolicyId " + newPolicyDefinition.getUid());
 
-        for (ContractDefinition contractDefinition : contractDefinitions) {
-            // Check if the contract definition uses the updated policy
-            if (Objects.equals(contractDefinition.getContractPolicyId(), newPolicyDefinition.getUid())) {
-                LOGGER.info("ContractDefinition " + contractDefinition.getId() + " is affected by the update to PolicyDefinition " + newPolicyDefinition.getUid());
 
-                // Now find the first asset that matches this contract definition's selector
-                List<Asset> assets = assetStore.findAll(QuerySpec.max()).toList();
-                LOGGER.fine("Evaluating " + assets.size() + " assets for ContractDefinition " + contractDefinition.getId());
+        QuerySpec querySpecContractPolicy = QuerySpec.Builder.newInstance()
+                .filter(List.of(new Criterion("contractPolicyId", "=", newPolicyDefinition.getUid())))
+                .build();
+        Stream<ContractDefinition> cdByContractPolicyStream = contractDefinitionStore.findAll(querySpecContractPolicy);
+        LOGGER.fine("Found contract definitions by contractPolicyId " + newPolicyDefinition.getUid());
 
-                for (Asset asset : assets) {
-                    if (matchesAsset(contractDefinition.getAssetsSelector(), asset)) {
-                        LOGGER.info("Asset " + asset.getId() + " matches ContractDefinition " + contractDefinition.getId() + ". Triggering event for policy update.");
-                        try {
-                            // The newPolicyDefinition is the one that was updated and is relevant here
-                            Map<String, Object> eventPayload = constructEventPayload(asset, contractDefinition, newPolicyDefinition);
-                            String jsonPayload = objectMapper.writeValueAsString(eventPayload);
-                            sendEvent(jsonPayload);
-                            // Found an asset for this contract definition, break from asset search as per requirement ("first relevant Asset")
-                            break;
-                        } catch (Exception e) {
-                            LOGGER.log(Level.SEVERE, "Error processing policy update for Asset " + asset.getId() + ", ContractDefinition " + contractDefinition.getId() + ", PolicyDefinition " + newPolicyDefinition.getUid(), e);
-                        }
-                    }
+        List<ContractDefinition> uniqueContractDefinitions = Stream.concat(cdByAccessPolicyStream, cdByContractPolicyStream)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (uniqueContractDefinitions.isEmpty()) {
+            LOGGER.info("No contract definitions found referencing updated policy ID: " + newPolicyDefinition.getUid());
+            return;
+        }
+        LOGGER.info("Total " + uniqueContractDefinitions.size() + " unique contract definitions are affected by the policy update.");
+
+        // 2. Fetch Matching Asset for each ContractDefinition
+        for (ContractDefinition contractDefinition : uniqueContractDefinitions) {
+            List<Criterion> assetSelectorCriteria = contractDefinition.getAssetsSelector();
+
+            // Use helper method to transform criteria
+            List<Criterion> transformedCriteria = transformAssetSelectorCriteria(assetSelectorCriteria);
+
+            if (transformedCriteria.isEmpty()) {
+                 LOGGER.warning("ContractDefinition " + contractDefinition.getId() +
+                                " has no valid asset selector criteria after transformation. Skipping asset search.");
+                continue;
+            }
+
+            QuerySpec assetQuerySpec = QuerySpec.Builder.newInstance()
+                    .filter(transformedCriteria)
+                    .limit(1)
+                    .build();
+
+            LOGGER.fine("Querying for asset matching ContractDefinition " + contractDefinition.getId() +
+                        " with criteria: " + transformedCriteria);
+
+            try (Stream<Asset> assetsStream = assetIndex.queryAssets(assetQuerySpec)) {
+                Asset matchingAsset = assetsStream.findFirst().orElse(null);
+
+                if (matchingAsset != null) {
+                    LOGGER.info("Asset " + matchingAsset.getId() + " found for ContractDefinition " +
+                                contractDefinition.getId() + ". Constructing and sending event.");
+                    Map<String, Object> eventPayload = constructEventPayload(matchingAsset, contractDefinition, newPolicyDefinition);
+                    String jsonPayload = objectMapper.writeValueAsString(eventPayload);
+                    sendEvent(jsonPayload);
+                    // As per current understanding, we process one asset per affected contract definition.
+                    // If only one event total for the policy update is needed, a break would go here.
+                } else {
+                    LOGGER.info("No matching asset found for ContractDefinition " + contractDefinition.getId() +
+                                " with the given criteria.");
                 }
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Error processing policy update for ContractDefinition " +
+                                         contractDefinition.getId() + " and PolicyDefinition " + newPolicyDefinition.getUid(), e);
             }
         }
     }
@@ -276,7 +314,38 @@ public class OffersObserver implements AssetListener, PolicyDefinitionListener, 
         LOGGER.info("ContractDefinition created event received for ID: " + contractDefinition.getId());
 
         try {
-            // 1. Fetch the PolicyDefinition
+            // 1. Handle Asset Selector and Find Matching Asset
+            List<Criterion> assetSelectorCriteria = contractDefinition.getAssetsSelector();
+            if (assetSelectorCriteria == null || assetSelectorCriteria.isEmpty()) {
+                LOGGER.warning("No asset selector criteria found for ContractDefinition " + contractDefinition.getId() + ". Event cannot be sent for a specific asset.");
+                return;
+            }
+
+            List<Criterion> transformedCriteria = transformAssetSelectorCriteria(assetSelectorCriteria);
+            if (transformedCriteria.isEmpty()) {
+                LOGGER.warning("Asset selector criteria for ContractDefinition " + contractDefinition.getId() +
+                               " resulted in empty transformed criteria. Skipping asset search.");
+                return;
+            }
+
+            QuerySpec assetQuerySpec = QuerySpec.Builder.newInstance()
+                    .filter(transformedCriteria)
+                    .limit(1)
+                    .build();
+
+            LOGGER.fine("Querying for asset matching new ContractDefinition " + contractDefinition.getId() + " with criteria: " + transformedCriteria);
+            Asset matchingAsset;
+            try (Stream<Asset> assetsStream = assetIndex.queryAssets(assetQuerySpec)) {
+                matchingAsset = assetsStream.findFirst().orElse(null);
+            }
+
+            if (matchingAsset == null) {
+                LOGGER.warning("No matching asset found for new ContractDefinition " + contractDefinition.getId() + " based on its asset selector. Event cannot be sent.");
+                return;
+            }
+            LOGGER.info("Asset " + matchingAsset.getId() + " found for new ContractDefinition " + contractDefinition.getId());
+
+            // 2. Fetch the PolicyDefinition
             PolicyDefinition policyDefinition = policyDefinitionStore.findById(contractDefinition.getContractPolicyId());
             if (policyDefinition == null) {
                 LOGGER.severe("PolicyDefinition not found for ID: " + contractDefinition.getContractPolicyId() +
@@ -284,38 +353,6 @@ public class OffersObserver implements AssetListener, PolicyDefinitionListener, 
                 return;
             }
             LOGGER.fine("Successfully fetched PolicyDefinition " + policyDefinition.getUid() + " for ContractDefinition " + contractDefinition.getId());
-
-            // 2. Find the first relevant Asset
-            List<Asset> assets = assetStore.findAll(QuerySpec.max()).toList();
-            Asset matchingAsset = null;
-            if (assets.isEmpty() && !contractDefinition.getAssetsSelector().isEmpty()) {
-                 LOGGER.warning("No assets available in the store to match against ContractDefinition " + contractDefinition.getId());
-            } else if (contractDefinition.getAssetsSelector().isEmpty()) {
-                LOGGER.warning("ContractDefinition " + contractDefinition.getId() + " has an empty asset selector. No specific asset to match.");
-                // Depending on requirements, an empty selector might mean "matches all" or "matches none".
-                // If it means "matches all", we might pick the first asset in the store, or send a generic event.
-                // For now, we proceed only if there's a selector and assets.
-                // If an empty selector implies it should not be processed here, or has special handling, this logic would change.
-                // Or, if it's a global contract not tied to specific assets, this event might not apply or need different handling.
-                // Given the current `matchesAsset` behavior (returns false for empty criteria), no asset will match.
-            }
-
-
-            LOGGER.fine("Evaluating " + assets.size() + " assets for new ContractDefinition " + contractDefinition.getId());
-            for (Asset asset : assets) {
-                if (matchesAsset(contractDefinition.getAssetsSelector(), asset)) {
-                    matchingAsset = asset;
-                    LOGGER.info("Asset " + matchingAsset.getId() + " matches new ContractDefinition " + contractDefinition.getId());
-                    break; // Found the first relevant asset
-                }
-            }
-
-            if (matchingAsset == null) {
-                // This log covers the case where selectors are present but no asset matches.
-                LOGGER.warning("No matching asset found for new ContractDefinition " + contractDefinition.getId() +
-                               " among " + assets.size() + " available assets. Event cannot be sent for a specific asset.");
-                return;
-            }
 
             // 3. Construct and send the event payload
             Map<String, Object> eventPayload = constructEventPayload(matchingAsset, contractDefinition, policyDefinition);
@@ -325,6 +362,32 @@ public class OffersObserver implements AssetListener, PolicyDefinitionListener, 
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Error processing ContractDefinition created event for ID: " + contractDefinition.getId(), e);
         }
+    }
+
+    // Helper method to transform asset selector criteria
+    private List<Criterion> transformAssetSelectorCriteria(List<Criterion> selectorCriteria) {
+        if (selectorCriteria == null || selectorCriteria.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Criterion> assetQueryCriteria = new ArrayList<>();
+        for (Criterion criterion : selectorCriteria) {
+            Object operandLeftObj = criterion.getOperandLeft();
+            if (operandLeftObj == null) { // Skip criteria with null operandLeft
+                LOGGER.warning("Skipping criterion with null operandLeft: " + criterion);
+                continue;
+            }
+            String originalOperandLeft = String.valueOf(operandLeftObj);
+            if (originalOperandLeft.trim().isEmpty()) { // Skip criteria with empty operandLeft
+                LOGGER.warning("Skipping criterion with empty operandLeft: " + criterion);
+                continue;
+            }
+            assetQueryCriteria.add(new Criterion(
+                    Asset.PROPERTIES + "." + originalOperandLeft,
+                    criterion.getOperator(),
+                    criterion.getOperandRight()
+            ));
+        }
+        return assetQueryCriteria;
     }
 
     @Override
